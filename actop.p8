@@ -5,7 +5,7 @@ __lua__
 
 -- global variables
 g_frames=0
-g_pl={}
+g_player={}
 g_enemies={}
 
 -- global constants
@@ -13,43 +13,46 @@ k_atk=5
 
 function _init()
   g_frames=0
-  enemy_manager.init(g_enemies)
-  player.init(g_pl)
+  enemy_manager.init()
+  player.init(g_player)
 end
 
 function _update()
   g_frames=(g_frames+1)%30
-  enemy_manager.update(g_enemies)
-  player.update(g_pl)
+  enemy_manager.update()
+  player.update(g_player)
 end
 
 function _draw()
   cls()
-  enemy_manager.draw(g_enemies)
-  player.draw(g_pl)
+  enemy_manager.draw()
+  player.draw(g_player)
 end
 -->8
 -- classes
 
 player={
   init=function(this)
+    this.hp=3
     this.x=64
     this.y=64
     this.dx=0
     this.dy=0
     this.face=3
     this.frame=0
-    this.hitbox={x=1,y=1,w=6,h=6}
+    this.hitbox={x=1,y=1,w=6,h=6} -- const
+    this.unvulnframe=0
     -- melee attack
     this.atk={}
     this.atk.x=0
     this.atk.y=0
     this.atk.face=0
     this.atk.frame=0
-    this.atk.hitbox={x=0,y=0,w=8,h=8}
+    this.atk.hitbox={x=0,y=0,w=8,h=8} -- const
     this.atk.pow=1
   end,
   update=function(this)
+    if (this.unvulnframe > 0) this.unvulnframe-=1
     -- input
     this.dx=0
     this.dy=0
@@ -69,7 +72,10 @@ player={
       this.face=3
       this.dy=1
     end
-    -- atk
+    -- move
+    this.x+=this.dx
+    this.y+=this.dy
+    -- attack
     if (btnp(k_atk) and (this.atk.frame == 0)) then
       this.atk.frame=3
       this.atk.face=this.face
@@ -80,9 +86,6 @@ player={
     if (this.atk.frame > 0) then
       enemy_manager.hit(this.atk)
     end
-    -- move
-    this.x+=this.dx
-    this.y+=this.dy
   end,
   draw=function(this)
     -- draw player body
@@ -102,6 +105,26 @@ player={
           this.y+atkpos.y*8)
       this.atk.frame-=1
     end
+    -- draw hp
+    for i=1,3 do
+      if (this.hp >= i) then
+        spr(11,i*8,0)
+      else
+        spr(10,i*8,0)
+      end
+    end
+  end,
+  hit=function(this,other)
+    if (this.unvulnframe == 0) then
+      if (collidebox(this,other)) then
+        this.hp-=other.pow
+        this.unvulnframe=30
+        if (this.hp <= 0) player.kill(this)
+      end
+    end
+  end,
+  kill=function(this)
+    -- todo player dead
   end,
 }
 
@@ -114,41 +137,52 @@ enemy={
     this.dy=0
     this.flipx=false
     this.frame=0
-    this.hitbox={x=0,y=3,w=7,h=5}
+    this.hitbox={x=0,y=3,w=7,h=5} -- const
+    this.unvulnframe=0
+    this.pow=1
   end,
   update=function(this)
+    if (this.unvulnframe > 0) this.unvulnframe-=1
     -- update speed and face
     if ((g_frames%30) == 0) then
-      this.dx=cmp(g_pl.x,this.x)*0.1
-      this.dy=cmp(g_pl.y,this.y)*0.1
+      this.dx=cmp(g_player.x,this.x)*0.1
+      this.dy=cmp(g_player.y,this.y)*0.1
       this.flipx=(this.dx > 0)
     end
     -- move
     this.x+=this.dx
     this.y+=this.dy
+    -- attack
+    player.hit(g_player,this)
   end,
   draw=function(this)
     spr(this.frame+32,this.x,this.y,1,1,this.flipx,false)
     if ((g_frames%5) == 0) this.frame=(this.frame+1)%2
   end,
   hit=function(this,other)
-    if (collidebox(this,other)) then
-      this.hp-=other.pow
-      enemy_manager.kill(this)
+    if (this.unvulnframe == 0) then
+      if (collidebox(this,other)) then
+        this.hp-=other.pow
+        this.unvulnframe=3
+        if (this.hp <= 0) enemy_manager.kill(this)
+      end
     end
   end,
 }
 
 -- manage function
+-- manipulate global variables
 
+-- global var g_enemies
 enemy_manager={
-  -- use global var g_enemies
   init=function()
     g_enemies={}
   end,
   update=function()
     foreach(g_enemies,enemy.update)
+    -- spawn if not enough enemy
     if (enemy_manager.count() < 2) then
+      -- todo spawn only away from player
       enemy_manager.spawn(flr(rnd(128)),flr(rnd(128)))
     end
   end,
@@ -207,12 +241,12 @@ end
 
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000088888800888888008888880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000088888800888888008888880000000000000000000000000000000000000000000000000000000000000000000000000000000000010010000000000
-00000000088888800888888008888880000000000000000000000000000000000000000000000000000000000000000000101000000101000010010000100100
-00000000088888800888888008888880000000000000000000000000000000000000000000000000000000000000000000101000000101000000000000100100
-00000000088888800888888008888880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000008008000080080000800800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000088888800888888008888880000000000000000000000000000000000000000000000000055055000880880000000000000000000000000000000000
+00000000088888800888888008888880000000000000000000000000000000000000000000000000500500508888878000000000000000000010010000000000
+00000000088888800888888008888880000000000000000000000000000000000000000000000000500000508888888000101000000101000010010000100100
+00000000088888800888888008888880000000000000000000000000000000000000000000000000050005000888880000101000000101000000000000100100
+00000000088888800888888008888880000000000000000000000000000000000000000000000000005050000088800000000000000000000000000000000000
+00000000008008000080080000800800000000000000000000000000000000000000000000000000000500000008000000000000000000000000000000000000
 00000000008008000080000000000800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000006000000076000000000000000000000000000000000000000000000055000000500000005500000600000000006000067760000000000
 00000000000000000007600000760000000000000000000000000000000000000000000000056700000550000006500006000000000000600600006000000000
