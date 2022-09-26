@@ -38,9 +38,16 @@ player={
     this.dx=0
     this.dy=0
     this.face=3
-    this.runframe=0
-    this.atkframe=0
-    this.atkface=0
+    this.frame=0
+    this.hitbox={x=1,y=1,w=6,h=6}
+    -- melee attack
+    this.atk={}
+    this.atk.x=0
+    this.atk.y=0
+    this.atk.face=0
+    this.atk.frame=0
+    this.atk.hitbox={x=0,y=0,w=8,h=8}
+    this.atk.pow=1
   end,
   update=function(this)
     -- input
@@ -62,9 +69,16 @@ player={
       this.face=3
       this.dy=1
     end
-    if (btnp(k_atk) and (this.atkframe == 0)) then
-      this.atkframe=3
-      this.atkface=this.face
+    -- atk
+    if (btnp(k_atk) and (this.atk.frame == 0)) then
+      this.atk.frame=3
+      this.atk.face=this.face
+      local atkpos=face2pos(this.atk.face)
+      this.atk.x=this.x+atkpos.x*8
+      this.atk.y=this.y+atkpos.y*8
+    end
+    if (this.atk.frame > 0) then
+      enemy_manager.hit(this.atk)
     end
     -- move
     this.x+=this.dx
@@ -75,30 +89,32 @@ player={
     if ((this.dx == 0) and (this.dy == 0)) then -- stop
       spr(1,this.x,this.y)
     else -- move
-      spr(2+this.runframe,this.x,this.y)
-      if ((g_frames%5) == 0) this.runframe=(this.runframe+1)%2
+      spr(2+this.frame,this.x,this.y)
+      if ((g_frames%5) == 0) this.frame=(this.frame+1)%2
     end
     -- draw player eye
     spr(this.face+12,this.x,this.y)
     -- draw atk
-    if (this.atkframe > 0) then
-      local atkpos=face2pos(this.atkface)
-      spr(this.atkface*3+this.atkframe+15,
+    if (this.atk.frame > 0) then
+      local atkpos=face2pos(this.atk.face)
+      spr(this.atk.face*3+this.atk.frame+15,
           this.x+atkpos.x*8,
           this.y+atkpos.y*8)
-      this.atkframe-=1
+      this.atk.frame-=1
     end
   end,
 }
 
 enemy={
   init=function(this,x,y)
+    this.hp=1
     this.x=x
     this.y=y
     this.dx=0
     this.dy=0
     this.flipx=false
-    this.runframe=0
+    this.frame=0
+    this.hitbox={x=0,y=3,w=7,h=5}
   end,
   update=function(this)
     -- update speed and face
@@ -112,36 +128,48 @@ enemy={
     this.y+=this.dy
   end,
   draw=function(this)
-    -- draw enemy
-    spr(this.runframe+32,this.x,this.y,1,1,this.flipx,false)
-    if ((g_frames%5) == 0) this.runframe=(this.runframe+1)%2
+    spr(this.frame+32,this.x,this.y,1,1,this.flipx,false)
+    if ((g_frames%5) == 0) this.frame=(this.frame+1)%2
+  end,
+  hit=function(this,other)
+    if (collidebox(this,other)) then
+      this.hp-=other.pow
+      enemy_manager.kill(this)
+    end
   end,
 }
 
 -- manage function
 
 enemy_manager={
-  init=function(this)
-    this.table={}
-    enemy_manager.spawn(this,50,50)
-    enemy_manager.spawn(this,60,60)
+  -- use global var g_enemies
+  init=function()
+    g_enemies={}
   end,
-  update=function(this)
-    foreach(this.table,enemy.update)
+  update=function()
+    foreach(g_enemies,enemy.update)
+    if (enemy_manager.count() < 2) then
+      enemy_manager.spawn(flr(rnd(128)),flr(rnd(128)))
+    end
   end,
-  draw=function(this)
-    foreach(this.table,enemy.draw)
+  draw=function()
+    foreach(g_enemies,enemy.draw)
   end,
-  spawn=function(this,x,y)
+  spawn=function(x,y)
     local obj={}
     enemy.init(obj,x,y)
-    add(this.table,obj)
+    add(g_enemies,obj)
   end,
-  count=function(this)
-    return #this.table
+  count=function()
+    return #g_enemies
+  end,
+  hit=function(other)
+    for e in all(g_enemies) do
+      enemy.hit(e,other)
+    end
   end,
   kill=function(obj)
-    del(this.table,obj)
+    del(g_enemies,obj)
   end,
 }
 
@@ -163,6 +191,17 @@ cmp=function(x1,x2)
   if (x1 < x2) res=-1
   if (x1 > x2) res=1
   return res
+end
+
+collidebox=function(obj1,obj2)
+  if ((obj1.x+obj1.hitbox.x < obj2.x+obj2.hitbox.x+obj2.hitbox.w) and
+      (obj1.x+obj1.hitbox.x+obj1.hitbox.w > obj2.x+obj2.hitbox.x) and
+      (obj1.y+obj1.hitbox.y < obj2.y+obj2.hitbox.y+obj2.hitbox.h) and
+      (obj1.y+obj1.hitbox.y+obj1.hitbox.h > obj2.y+obj2.hitbox.y)) then
+    return true
+  else
+    return false
+  end
 end
 
 
