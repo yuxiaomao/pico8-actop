@@ -2,6 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 38
 __lua__
 -- actop
+-- by ymao
 
 -- sfx:
 --   0: attack
@@ -11,6 +12,7 @@ __lua__
 
 -- global variables
 g_frames=0
+g_difficulty=0
 g_player={}
 g_player_bullets={}
 g_enemies={}
@@ -36,6 +38,7 @@ end
 
 function _initlevel()
   g_frames=0
+  g_difficulty=0
   item_manager.init()
   enemy_manager.init()
   player.init(g_player)
@@ -220,7 +223,8 @@ bullet={
 }
 
 -- manage function
--- manipulate global var g_player_bullets
+-- manipulate global var
+--   g_player_bullets
 bullet_manager={
   init=function()
     g_player_bullets={}
@@ -250,8 +254,9 @@ bullet_manager={
 -->8
 -- enemy
 
-enemy={
+enemy_slime={
   init=function(this,x,y)
+    this.type=enemy_slime
     this.hp=1
     this.x=x
     this.y=y
@@ -294,42 +299,49 @@ enemy={
 }
 
 -- manage function
--- manipulate global var g_enemies, g_killcnt
+-- manipulate global var
+--   g_enemies, g_killcnt, g_difficulty
 enemy_manager={
   init=function()
     g_killcnt=0
     g_enemies={}
   end,
   update=function()
-    foreach(g_enemies,enemy.update)
+    for e in all(g_enemies) do
+      e.type.update(e)
+    end
     -- spawn if not enough enemy
-    if (enemy_manager.count() < 2) then
+    if (enemy_manager.count() < g_difficulty+2) then
       enemy_manager.spawnrnd()
     end
   end,
   draw=function()
-    foreach(g_enemies,enemy.draw)
+    for e in all(g_enemies) do
+      e.type.draw(e)
+    end
   end,
-  spawn=function(x,y)
+  spawn=function(type,x,y)
     local obj={}
-    enemy.init(obj,x,y)
+    type.init(obj,x,y)
     add(g_enemies,obj)
   end,
   spawnrnd=function()
     local spawnpos=rndspawnpos()
-    enemy_manager.spawn(spawnpos.x,spawnpos.y)
+    local type=enemy_slime
+    enemy_manager.spawn(type,spawnpos.x,spawnpos.y)
   end,
   count=function()
     return #g_enemies
   end,
   hitall=function(other)
     for e in all(g_enemies) do
-      enemy.hit(e,other)
+      e.type.hit(e,other)
     end
   end,
   kill=function(obj)
     g_killcnt+=1
     if ((g_killcnt % 5) == 0) item_manager.spawnrnd()
+    if ((g_killcnt % 10) == 0) g_difficulty+=1
     del(g_enemies,obj)
   end,
 }
@@ -380,7 +392,8 @@ item_mp={
 }
 
 -- manage function
--- manipulate global var g_items, g_itemtypes
+-- manipulate global var
+--   g_items, g_itemtypes
 item_manager={
   init=function()
     g_items={}
