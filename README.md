@@ -1,11 +1,16 @@
 # Pico8-Actop : pico-8 based 2d top-down action
 
+Play online at: [https://yuxiaomao.github.io/pico8-actop]
+
 Learning project
 
 ## Implemented features
 - Animated player move, player attack, enemy move
 - Auto spawn enemy
-- Auto spawn pickable item (pill for hp)
+- Auto spawn pickable item (pill for hp/mp)
+- Player can make melee attack
+- Player can make ranged attack using mp
+- Difficulty (spawn more enemy after some kills)
 
 ## Build
 In pico-8:
