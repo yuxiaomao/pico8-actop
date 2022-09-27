@@ -19,6 +19,7 @@ g_enemies={}
 g_killcnt=0
 g_items={}
 g_itemtypes={}
+g_alive=true
 
 -- global constants
 k_atk=5
@@ -39,6 +40,7 @@ end
 function _initlevel()
   g_frames=0
   g_difficulty=0
+  g_alive=true
   item_manager.init()
   enemy_manager.init()
   player.init(g_player)
@@ -47,10 +49,16 @@ end
 
 function _updatelevel()
   g_frames=(g_frames+1)%30
-  item_manager.update()
-  enemy_manager.update()
-  player.update(g_player)
-  bullet_manager.update()
+  if (g_alive) then
+    item_manager.update()
+    enemy_manager.update()
+    player.update(g_player)
+    bullet_manager.update()
+  else -- not g_alive
+    if (btnp(5)) then
+      _initlevel()
+    end
+  end
 end
 
 function _drawlevel()
@@ -76,6 +84,13 @@ function _drawlevel()
   end
   local killpos=print(g_killcnt,0,-20)
   print("\f7score: "..g_killcnt,100-killpos,0)
+  -- draw dead message
+  if (not g_alive) then
+    local titlex=32
+    local titley=24
+    print("\#2\^w\^tyou died!",titlex,titley)
+    print("\#2press ❎ to restart",titlex-2,titlex+64)
+  end
 end
 -->8
 -- player
@@ -189,7 +204,7 @@ player={
     end
   end,
   kill=function(this)
-    -- todo player dead
+    g_alive=false
   end,
 }
 
@@ -364,7 +379,7 @@ item_hp={
   consume=function(this,other)
     if (collidebox(this,other)) then
       sfx(2)
-      other.hp+=1
+      if (other.hp < other.hpmax) other.hp+=1
       item_manager.remove(this)
     end
   end,
