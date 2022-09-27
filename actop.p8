@@ -6,37 +6,55 @@ __lua__
 -- sfx:
 --   0: attack
 --   1: player hit by enemy
+--   2: pickup item
 
 -- global variables
 g_frames=0
 g_player={}
 g_enemies={}
+g_killcnt=0
+g_items={}
+g_itemtypes={}
 
 -- global constants
 k_atk=5
 
 function _init()
   g_frames=0
+  item_manager.init()
   enemy_manager.init()
   player.init(g_player)
 end
 
 function _update()
   g_frames=(g_frames+1)%30
+  item_manager.update()
   enemy_manager.update()
   player.update(g_player)
 end
 
 function _draw()
   cls()
+  item_manager.draw()
   enemy_manager.draw()
   player.draw(g_player)
+  -- draw ui
+  for i=1,g_player.hpmax do
+    if (g_player.hp >= i) then
+      spr(11,i*8,0)
+    else
+      spr(10,i*8,0)
+    end
+  end
+  local killpos=print(g_killcnt,0,-20)
+  print("score: "..g_killcnt,100-killpos,0)
 end
 -->8
--- classes
+-- player
 
 player={
   init=function(this)
+    this.hpmax=3 -- const
     this.hp=3
     this.x=64
     this.y=64
@@ -81,6 +99,7 @@ player={
     -- move
     this.x+=this.dx
     this.y+=this.dy
+    item_manager.consumeall(this)
     -- attack
     if (btn(k_atk) and (this.atk.cooldown == 0)) then
       sfx(0)
@@ -92,7 +111,7 @@ player={
       this.atk.y=this.y+atkpos.y*8
     end
     if (this.atk.frame > 0) then
-      enemy_manager.hit(this.atk)
+      enemy_manager.hitall(this.atk)
     end
   end,
   draw=function(this)
@@ -115,14 +134,6 @@ player={
           this.y+atkpos.y*8)
       this.atk.frame-=1
     end
-    -- draw hp
-    for i=1,3 do
-      if (this.hp >= i) then
-        spr(11,i*8,0)
-      else
-        spr(10,i*8,0)
-      end
-    end
   end,
   hit=function(this,other)
     if (this.invulnframe == 0) then
@@ -139,6 +150,9 @@ player={
   end,
 }
 
+-->8
+-- enemy
+
 enemy={
   init=function(this,x,y)
     this.hp=1
@@ -148,7 +162,7 @@ enemy={
     this.dy=0
     this.flipx=false
     this.frame=0
-    this.hitbox={x=0,y=3,w=7,h=5} -- const
+    this.hitbox={x=0,y=3,w=8,h=5} -- const
     this.invulnframe=0
     this.pow=1
   end,
@@ -182,26 +196,18 @@ enemy={
 }
 
 -- manage function
--- manipulate global variables
-
--- global var g_enemies
+-- manipulate global var g_enemies, g_killcnt
 enemy_manager={
   init=function()
+    g_killcnt=0
     g_enemies={}
   end,
   update=function()
     foreach(g_enemies,enemy.update)
     -- spawn if not enough enemy
     if (enemy_manager.count() < 2) then
-      -- spawn only away from player
-      local x=0
-      local y=0
-      repeat
-        x=flr(rnd(128))
-        y=flr(rnd(128))
-      until ((abs(x-g_player.x)>20)
-             or (abs(y-g_player.y)>20))
-      enemy_manager.spawn(x,y)
+      local spawnpos=rndspawnpos()
+      enemy_manager.spawn(spawnpos.x,spawnpos.y)
     end
   end,
   draw=function()
@@ -215,16 +221,87 @@ enemy_manager={
   count=function()
     return #g_enemies
   end,
-  hit=function(other)
+  hitall=function(other)
     for e in all(g_enemies) do
       enemy.hit(e,other)
     end
   end,
   kill=function(obj)
+    g_killcnt+=1
+    if ((g_killcnt % 5) == 0) item_manager.spawnrnd()
     del(g_enemies,obj)
   end,
 }
 
+-->8
+-- item
+
+item_hp={
+  init=function(this,x,y)
+    this.type=item_hp
+    this.x=x
+    this.y=y
+    this.hitbox={x=1,y=1,w=6,h=6}
+  end,
+  update=function(this)
+  end,
+  draw=function(this)
+    spr(48,this.x,this.y)
+  end,
+  consume=function(this,other)
+    if (collidebox(this,other)) then
+      if (other.hp < other.hpmax) then
+        sfx(2)
+        other.hp+=1
+        item_manager.remove(this)
+      end
+    end
+  end,
+}
+
+-- manage function
+-- manipulate global var g_items, g_itemtypes
+item_manager={
+  init=function()
+    g_items={}
+    g_itemtypes={item_hp}
+    item_manager.spawn(item_hp,50,50)
+  end,
+  update=function()
+    for i in all(g_items) do
+      i.type.update(i)
+    end
+  end,
+  draw=function()
+    for i in all(g_items) do
+      i.type.draw(i)
+    end
+  end,
+  spawn=function(type,x,y)
+    local obj={}
+    type.init(obj,x,y)
+    add(g_items,obj)
+  end,
+  spawnrnd=function()
+    local type=rnd(g_itemtypes)
+    local pos=rndspawnpos()
+    item_manager.spawn(type,pos.x,pos.y)
+  end,
+  count=function()
+    return #g_items
+  end,
+  consumeall=function(other)
+    for i in all(g_items) do
+      (i.type).consume(i,other)
+    end
+  end,
+  remove=function(obj)
+    del(g_items,obj)
+  end,
+}
+
+-->8
+-- util
 
 -- helper function
 
@@ -256,6 +333,19 @@ collidebox=function(obj1,obj2)
   end
 end
 
+-- random spawn location away from player
+rndspawnpos=function()
+  -- spawn only away from player
+  local x=0
+  local y=0
+  repeat
+    x=flr(rnd(120))
+    y=flr(rnd(120))
+  until ((abs(x-g_player.x)>20)
+         or (abs(y-g_player.y)>20))
+  return {x=x,y=y}
+end
+
 
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -282,6 +372,14 @@ __gfx__
 33333300333333000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 33333300033333300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 03333330003333330000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00008800000007600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00088880000076700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00768880005767000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+07776800000570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+07777000006050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00770000060000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 000600002435027250000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000003a6703f6703c6500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000a0000350503c050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
