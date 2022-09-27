@@ -3,6 +3,10 @@ version 38
 __lua__
 -- actop
 
+-- sfx:
+--   0: attack
+--   1: player hit by enemy
+
 -- global variables
 g_frames=0
 g_player={}
@@ -41,18 +45,20 @@ player={
     this.face=3
     this.frame=0
     this.hitbox={x=1,y=1,w=6,h=6} -- const
-    this.unvulnframe=0
+    this.invulnframe=0
     -- melee attack
     this.atk={}
     this.atk.x=0
     this.atk.y=0
     this.atk.face=0
     this.atk.frame=0
+    this.atk.cooldown=0
     this.atk.hitbox={x=0,y=0,w=8,h=8} -- const
     this.atk.pow=1
   end,
   update=function(this)
-    if (this.unvulnframe > 0) this.unvulnframe-=1
+    if (this.invulnframe > 0) this.invulnframe-=1
+    if (this.atk.cooldown > 0) this.atk.cooldown-=1
     -- input
     this.dx=0
     this.dy=0
@@ -76,8 +82,10 @@ player={
     this.x+=this.dx
     this.y+=this.dy
     -- attack
-    if (btnp(k_atk) and (this.atk.frame == 0)) then
+    if (btn(k_atk) and (this.atk.cooldown == 0)) then
+      sfx(0)
       this.atk.frame=3
+      this.atk.cooldown=10
       this.atk.face=this.face
       local atkpos=face2pos(this.atk.face)
       this.atk.x=this.x+atkpos.x*8
@@ -89,12 +97,14 @@ player={
   end,
   draw=function(this)
     -- draw player body
+    if (this.invulnframe > 0) pal(8,9)
     if ((this.dx == 0) and (this.dy == 0)) then -- stop
       spr(1,this.x,this.y)
     else -- move
       spr(2+this.frame,this.x,this.y)
       if ((g_frames%5) == 0) this.frame=(this.frame+1)%2
     end
+    pal()
     -- draw player eye
     spr(this.face+12,this.x,this.y)
     -- draw atk
@@ -115,10 +125,11 @@ player={
     end
   end,
   hit=function(this,other)
-    if (this.unvulnframe == 0) then
+    if (this.invulnframe == 0) then
       if (collidebox(this,other)) then
+        sfx(1)
         this.hp-=other.pow
-        this.unvulnframe=30
+        this.invulnframe=30
         if (this.hp <= 0) player.kill(this)
       end
     end
@@ -138,11 +149,11 @@ enemy={
     this.flipx=false
     this.frame=0
     this.hitbox={x=0,y=3,w=7,h=5} -- const
-    this.unvulnframe=0
+    this.invulnframe=0
     this.pow=1
   end,
   update=function(this)
-    if (this.unvulnframe > 0) this.unvulnframe-=1
+    if (this.invulnframe > 0) this.invulnframe-=1
     -- update speed and face
     if ((g_frames%30) == 0) then
       this.dx=cmp(g_player.x,this.x)*0.1
@@ -160,10 +171,10 @@ enemy={
     if ((g_frames%5) == 0) this.frame=(this.frame+1)%2
   end,
   hit=function(this,other)
-    if (this.unvulnframe == 0) then
+    if (this.invulnframe == 0) then
       if (collidebox(this,other)) then
         this.hp-=other.pow
-        this.unvulnframe=3
+        this.invulnframe=3
         if (this.hp <= 0) enemy_manager.kill(this)
       end
     end
@@ -182,8 +193,15 @@ enemy_manager={
     foreach(g_enemies,enemy.update)
     -- spawn if not enough enemy
     if (enemy_manager.count() < 2) then
-      -- todo spawn only away from player
-      enemy_manager.spawn(flr(rnd(128)),flr(rnd(128)))
+      -- spawn only away from player
+      local x=0
+      local y=0
+      repeat
+        x=flr(rnd(128))
+        y=flr(rnd(128))
+      until ((abs(x-g_player.x)>20)
+             or (abs(y-g_player.y)>20))
+      enemy_manager.spawn(x,y)
     end
   end,
   draw=function()
@@ -264,3 +282,6 @@ __gfx__
 33333300333333000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 33333300033333300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 03333330003333330000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+__sfx__
+000600002435027250000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000003a6703f6703c6500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
